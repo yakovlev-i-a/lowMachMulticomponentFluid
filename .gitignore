@@ -1,0 +1,7 @@
+# Build artifacts
+Make/linux64*/
+Make/linuxARM64*/
+Make/linuxARM7*/
+
+# OpenFOAM dependency/lnInclude symlinks
+lnInclude/
