@@ -230,6 +230,9 @@ void Foam::solvers::lowMachMulticomponentFluid::correctDynamicPressure()
 
     // Low-Mach dynamic pressure equation (strict Poisson): the acoustic term
     // psi*ddt(p) is removed and the density comes from the EOS at p = pRef.
+    // Stability on non-orthogonal meshes / sharp density gradients is provided
+    // by the implicit under-relaxation of the pd equation below
+    // (pdEqnN.relax()), not by an artificial pseudo-compressibility term.
     fvScalarMatrix pdEqn
     (
         fvc::ddt(rho)
@@ -242,6 +245,13 @@ void Foam::solvers::lowMachMulticomponentFluid::correctDynamicPressure()
     while (pimple.correctNonOrthogonal())
     {
         fvScalarMatrix pdEqnN(pdEqn);
+
+        // Implicit relaxation of the pressure equation (Fluent-style URF,
+        // Fluent Theory Guide eq. 18.4-23). It adds the diagonal term
+        // (1-alpha)/alpha * diag * pd_old and restores diagonal dominance of
+        // the strict low-Mach Poisson equation. Read from
+        // relaxationFactors { equations { pd <alpha>; } }.
+        pdEqnN.relax();
 
         pdEqnN.setReference
         (

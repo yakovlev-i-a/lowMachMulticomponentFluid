@@ -194,7 +194,7 @@ was found to make the strict Poisson equation poorly conditioned; with a Dirichl
 ## 9. Recommended solver settings
 
 The coupled thermo–flow iteration converges cleanly with tight inner tolerances and
-a mild density relaxation. A validated configuration is:
+implicit under-relaxation of the pressure equation. A validated configuration is:
 
 ```
 PIMPLE
@@ -207,6 +207,14 @@ PIMPLE
 
 solvers
 {
+    pd
+    {
+        solver          GAMG;
+        smoother        DICGaussSeidel;
+        tolerance       1e-8;
+        relTol          0.01;
+    }
+
     "(U|h|k|epsilon)"
     {
         solver          PBiCGStab;
@@ -218,17 +226,40 @@ solvers
 
 relaxationFactors
 {
-    fields
+    equations
     {
-        rho 0.9;
+        U   0.7;     // momentum equation under-relaxation
+        pd  0.3;     // dynamic-pressure equation under-relaxation
     }
 }
 ```
 
+### Why the `pd` equation needs under-relaxation
+
+The strict low-Mach Poisson equation for `pd` has no diagonal acoustic damping.
+On non-orthogonal meshes or with sharp density gradients (a hot wall adjacent to
+cold gas) the pressure matrix is poorly conditioned and the velocity corrector
+diverges on the very first step. The fix is **implicit under-relaxation of the
+`pd` equation** (not of the field), applied in the solver by `pdEqnN.relax()`.
+It adds the diagonal term (Fluent Theory Guide eq. 18.4-23)
+
+    a_P * p / alpha = sum_nb(a_nb * p_nb) + b + (1-alpha)/alpha * a_P * p_old
+
+with alpha = 0.3 for `pd`. The added diagonal entry restores diagonal dominance
+without changing the converged solution. These are exactly the Fluent
+pressure-based-solver defaults (`Pressure 0.3`, `Momentum 0.7`).
+
+### Important distinction
+
+- `equations { pd 0.3; }` — **implicit** relaxation of the pressure *equation*
+  (matrix diagonal); this is the stabiliser. ✅
+- `fields { pd 0.3; }` — **explicit** relaxation of the pressure *field* (applied
+  after solving); this does **not** help the pressure-velocity coupling. ❌
+
+Do not put `pd` under `fields` — put it under `equations`.
+
 These are case-specific recommendations, not hard-coded into the solver. The number
 of outer correctors and the relaxation factor depend on the flow, mesh and chemistry.
-
----
 
 ## 10. Validation case
 
